@@ -3,7 +3,11 @@ import { createRoot } from 'react-dom/client';
 import { supabase } from './lib/supabase';
 import Host from './host/Host';
 import Play from './play/Play';
+import { applyTheme } from './lib/themes';
+import { store } from './lib/util';
 import './styles.css';
+
+applyTheme(store.get('trivia-theme'));
 
 function App() {
   if (!supabase) {

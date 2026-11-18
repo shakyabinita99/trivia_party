@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { room, supabase } from '../lib/supabase';
-import type { PubState } from '../lib/types';
+import { fmtNum, type PubState } from '../lib/types';
 import { ordinal, playerId, store, useNow } from '../lib/util';
 import Choices from '../Choices';
+import { applyTheme } from '../lib/themes';
 
 const SESSION_KEY = 'trivia-session';
 type Session = { pin: string; name: string };
@@ -95,6 +96,8 @@ function Live({ session, onLeave }: { session: Session; onLeave: (msg?: string) 
       stRef.current = s;
       if (s.players[id]) misses.current = 0;
       setSt(s);
+      applyTheme(s.theme);
+      store.set('trivia-theme', s.theme);
       setDeadline(s.phase === 'question' ? Date.now() + s.remaining : 0);
     }).subscribe((status) => status === 'SUBSCRIBED' && sendJoin());
     chan.current = ch;
@@ -150,7 +153,12 @@ function Live({ session, onLeave }: { session: Session; onLeave: (msg?: string) 
           <>
             <h2>Answer locked in</h2>
             <p className="muted">Waiting for the others…</p>
-            {myPick !== null && <Choices choices={st.choices} picked={myPick} />}
+            {myPick !== null &&
+              (st.kind === 'number' ? (
+                <p className="big">{fmtNum(myPick, st.pre, st.suf)}</p>
+              ) : (
+                <Choices choices={st.choices} picked={myPick} />
+              ))}
           </>
         ) : (
           <>
@@ -161,11 +169,27 @@ function Live({ session, onLeave }: { session: Session; onLeave: (msg?: string) 
               <span className={`timer sm ${left <= 5 ? 'warn' : ''}`}>{left}</span>
             </div>
             <p className="ptext">{st.text}</p>
-            <Choices choices={st.choices} onPick={pick} />
+            {st.kind === 'number' ? (
+              <GuessForm key={st.q} pre={st.pre} suf={st.suf} onSubmit={pick} />
+            ) : (
+              <Choices choices={st.choices} onPick={pick} />
+            )}
           </>
         ))}
 
-      {st.phase === 'reveal' && (
+      {st.phase === 'reveal' && st.kind === 'number' && (
+        <div className={`result ${me.ok ? 'good' : me.pts ? 'near' : 'bad'}`}>
+          <h2>{me.ok ? 'Closest!' : me.voted ? `${ordinal(me.place)} closest` : "Time's up"}</h2>
+          <p className="big">+{me.pts}</p>
+          <p>
+            Actual {fmtNum(st.answer ?? 0, st.pre, st.suf)}
+            {me.guess !== null && ` · you guessed ${fmtNum(me.guess, st.pre, st.suf)}`}
+          </p>
+          <p>You're in {ordinal(me.rank)} place</p>
+        </div>
+      )}
+
+      {st.phase === 'reveal' && st.kind !== 'number' && (
         <div className={`result ${me.ok ? 'good' : 'bad'}`}>
           <h2>{me.ok ? 'Correct!' : me.voted ? 'Not quite' : "Time's up"}</h2>
           <p className="big">{me.ok ? `+${me.pts}` : '+0'}</p>
@@ -189,6 +213,36 @@ function Live({ session, onLeave }: { session: Session; onLeave: (msg?: string) 
         </>
       )}
     </Shell>
+  );
+}
+
+function GuessForm({ pre, suf, onSubmit }: { pre: string; suf: string; onSubmit: (n: number) => void }) {
+  const [v, setV] = useState('');
+  const n = Number(v.replace(/,/g, ''));
+  const valid = v.trim() !== '' && Number.isFinite(n) && Math.abs(n) <= 1e12;
+  return (
+    <form
+      className="guess"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (valid) onSubmit(n);
+      }}
+    >
+      <div className="guess-input">
+        {pre && <span>{pre}</span>}
+        <input
+          autoFocus
+          inputMode="decimal"
+          placeholder="Your guess"
+          value={v}
+          onChange={(e) => setV(e.target.value.replace(/[^\d.,-]/g, ''))}
+        />
+        {suf && <span>{suf}</span>}
+      </div>
+      <button type="submit" disabled={!valid}>
+        Lock in
+      </button>
+    </form>
   );
 }
 

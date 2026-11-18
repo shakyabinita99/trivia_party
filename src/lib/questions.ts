@@ -76,6 +76,9 @@ A tomato is a fruit.
 * True
 - False
 
+What was the launch price of the original 4GB iPhone in 2007?
+= $499
+
 How many players are on a soccer team on the field?
 - 9
 - 10
@@ -93,7 +96,8 @@ export const QUESTIONS_KEY = 'trivia-questions';
 type Parsed = { qs: Question[]; err: string | null };
 
 /**
- * Format: question line, then 2–4 choice lines starting with "-" (wrong) or "*" (correct).
+ * Format: question line, then 2–4 choice lines starting with "-" (wrong) or "*" (correct),
+ * or a single "= value" line for a closest-guess question (e.g. "= $1299", "= 42 kg").
  * Questions are separated by a blank line.
  */
 export function parse(src: string, time: number): Parsed {
@@ -107,6 +111,23 @@ export function parse(src: string, time: number): Parsed {
 
   for (const [i, block] of blocks.entries()) {
     const [text, ...lines] = block.split('\n').map((l) => l.trim()).filter(Boolean);
+    const eq = lines.filter((l) => l.startsWith('='));
+    if (eq.length) {
+      if (eq.length > 1 || lines.length > 1) return fail(i, 'a price/number question has only one "=" line.');
+      const m = /^=\s*([^\d\s.-]*)\s*(-?[\d,]*\.?\d+)\s*(.*)$/.exec(eq[0]);
+      const val = m ? Number(m[2].replace(/,/g, '')) : NaN;
+      if (!m || !Number.isFinite(val)) return fail(i, `"${eq[0]}" should look like "= $1299" or "= 42 kg".`);
+      qs.push({
+        text: text.slice(0, 200),
+        choices: [],
+        answer: val,
+        time: Math.max(time, 20),
+        kind: 'number',
+        pre: m[1].slice(0, 5),
+        suf: m[3].trim().slice(0, 12),
+      });
+      continue;
+    }
     const choices: string[] = [];
     let answer = -1;
     for (const line of lines) {

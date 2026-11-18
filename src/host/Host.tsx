@@ -3,10 +3,24 @@ import QRCode from 'qrcode';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { room, supabase } from '../lib/supabase';
 import { parse, QUESTIONS_KEY, SAMPLE } from '../lib/questions';
-import type { AnswerMsg, JoinMsg } from '../lib/types';
+import { fmtNum, type AnswerMsg, type JoinMsg, type Question } from '../lib/types';
+import { applyTheme, isTheme, THEMES, type ThemeId } from '../lib/themes';
 import { store, useNow } from '../lib/util';
 import Choices from '../Choices';
-import { advance, answer, counts, join, kick, newGame, publicState, ranked, replay, reveal, type Game } from './game';
+import {
+  advance,
+  answer,
+  counts,
+  guesses,
+  join,
+  kick,
+  newGame,
+  publicState,
+  ranked,
+  replay,
+  reveal,
+  type Game,
+} from './game';
 
 const GAME_KEY = 'trivia-host-game';
 type SetGame = Dispatch<SetStateAction<Game | null>>;
@@ -20,49 +34,129 @@ export default function Host() {
     setGame(null);
   };
 
-  return game ? <Room game={game} setGame={setGame} onExit={exit} /> : <Setup onCreate={(qs) => setGame(newGame(qs))} />;
+  return game ? (
+    <Room game={game} setGame={setGame} onExit={exit} />
+  ) : (
+    <Setup onCreate={(qs, theme) => setGame(newGame(qs, theme))} />
+  );
 }
 
-function Setup({ onCreate }: { onCreate: (qs: Game['questions']) => void }) {
+type Saved = { id: string; name: string; questions: string; theme: ThemeId; time: number };
+
+function Setup({ onCreate }: { onCreate: (qs: Question[], theme: ThemeId) => void }) {
   const [src, setSrc] = useState(() => store.get<string>(QUESTIONS_KEY) ?? SAMPLE);
+  const [name, setName] = useState(() => store.get<string>('trivia-quiz-name') ?? 'General Knowledge');
+  const [theme, setTheme] = useState<ThemeId>(() => {
+    const t = store.get<string>('trivia-theme');
+    return isTheme(t) ? t : 'party';
+  });
   const [time, setTime] = useState(20);
+  const [saved, setSaved] = useState<Saved[]>([]);
+  const [msg, setMsg] = useState('');
   const { qs, err } = useMemo(() => parse(src, time), [src, time]);
 
   useEffect(() => store.set(QUESTIONS_KEY, src), [src]);
+  useEffect(() => store.set('trivia-quiz-name', name), [name]);
+  useEffect(() => {
+    applyTheme(theme);
+    store.set('trivia-theme', theme);
+  }, [theme]);
+
+  const refresh = async () => {
+    const { data, error } = await supabase!
+      .from('trivia_quizzes')
+      .select('id,name,questions,theme,time')
+      .order('updated_at', { ascending: false })
+      .limit(100);
+    if (error) setMsg(`Couldn't load saved quizzes: ${error.message}`);
+    else setSaved((data ?? []) as Saved[]);
+  };
+  useEffect(() => void refresh(), []);
+
+  const load = (id: string) => {
+    const quiz = saved.find((x) => x.id === id);
+    if (!quiz) return;
+    setSrc(quiz.questions);
+    setName(quiz.name);
+    setTheme(isTheme(quiz.theme) ? quiz.theme : 'party');
+    setTime(quiz.time);
+    setMsg(`Loaded "${quiz.name}"`);
+  };
+
+  const save = async () => {
+    const n = name.trim();
+    if (!n) return setMsg('Give your quiz a name first.');
+    setMsg('Saving…');
+    const { error } = await supabase!
+      .from('trivia_quizzes')
+      .upsert({ name: n, questions: src, theme, time }, { onConflict: 'name' });
+    setMsg(error ? `Save failed: ${error.message}` : `Saved "${n}"`);
+    if (!error) void refresh();
+  };
 
   return (
     <main className="page setup">
       <h1 className="brand">Trivia Party</h1>
+
+      <div className="card">
+        <h2>Theme</h2>
+        <div className="themes">
+          {THEMES.map((t) => (
+            <button
+              key={t.id}
+              className={`swatch ${t.id === theme ? 'on' : ''}`}
+              data-swatch={t.id}
+              onClick={() => setTheme(t.id)}
+            >
+              {t.name}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="card">
         <div className="row">
           <h2>Questions</h2>
-          <label className="muted">
-            Time per question{' '}
-            <select value={time} onChange={(e) => setTime(Number(e.target.value))}>
-              {[10, 15, 20, 30, 45, 60].map((s) => (
-                <option key={s} value={s}>
-                  {s}s
+          <span className="gap">
+            <select value="" onChange={(e) => load(e.target.value)} aria-label="Load saved quiz">
+              <option value="">{saved.length ? 'Load saved quiz…' : 'No saved quizzes'}</option>
+              {saved.map((x) => (
+                <option key={x.id} value={x.id}>
+                  {x.name}
                 </option>
               ))}
             </select>
-          </label>
+            <select value={time} onChange={(e) => setTime(Number(e.target.value))} aria-label="Time per question">
+              {[10, 15, 20, 30, 45, 60].map((s) => (
+                <option key={s} value={s}>
+                  {s}s each
+                </option>
+              ))}
+            </select>
+          </span>
         </div>
+        <input value={name} maxLength={60} placeholder="Quiz name" onChange={(e) => setName(e.target.value)} />
         <p className="muted small">
           One question per block, blank line between questions. Start choices with <code>-</code>, mark the correct
-          one with <code>*</code>. 2–4 choices each.
+          one with <code>*</code>. 2–4 choices each. For a closest-guess (price) round, use one line like{' '}
+          <code>= $499</code> instead of choices.
         </p>
-        <textarea value={src} onChange={(e) => setSrc(e.target.value)} spellCheck={false} rows={18} />
+        <textarea value={src} onChange={(e) => setSrc(e.target.value)} spellCheck={false} rows={16} />
         <div className="row">
           <span className={err ? 'error' : 'ok'}>{err ?? `${qs.length} questions ready`}</span>
           <span className="gap">
             <button className="ghost" onClick={() => confirm('Replace with sample questions?') && setSrc(SAMPLE)}>
-              Load sample
+              Sample
             </button>
-            <button disabled={!!err} onClick={() => onCreate(qs)}>
+            <button className="ghost" disabled={!!err} onClick={save}>
+              Save
+            </button>
+            <button disabled={!!err} onClick={() => onCreate(qs, theme)}>
               Create game
             </button>
           </span>
         </div>
+        {msg && <p className="muted small">{msg}</p>}
       </div>
     </main>
   );
@@ -108,6 +202,11 @@ function Room({ game, setGame, onExit }: { game: Game; setGame: SetGame; onExit:
     return () => clearInterval(t);
   }, [live]);
 
+  useEffect(() => {
+    applyTheme(game.theme);
+    store.set('trivia-theme', game.theme);
+  }, [game.theme]);
+
   // Question timer
   const q = game.questions[game.q];
   useEffect(() => {
@@ -120,6 +219,7 @@ function Room({ game, setGame, onExit }: { game: Game; setGame: SetGame; onExit:
   const left = Math.max(0, Math.ceil((game.startAt + q.time * 1000 - now) / 1000));
   const list = ranked(game);
   const answered = Object.keys(game.answers).filter((id) => game.players[id]).length;
+  const near = q.kind === 'number' && game.phase === 'reveal' ? guesses(game) : [];
   const go = () => setGame((g) => g && advance(g));
   const pinText = `${game.pin.slice(0, 3)} ${game.pin.slice(3)}`;
 
@@ -130,9 +230,25 @@ function Room({ game, setGame, onExit }: { game: Game; setGame: SetGame; onExit:
         <span className="muted">
           PIN <b>{pinText}</b> · {list.length} players {!live && <span className="error">· connecting…</span>}
         </span>
-        <button className="ghost sm" onClick={onExit}>
-          End game
-        </button>
+        <span className="gap">
+          <select
+            value={game.theme ?? 'party'}
+            aria-label="Theme"
+            onChange={(e) => {
+              const theme = e.target.value;
+              if (isTheme(theme)) setGame((g) => g && { ...g, theme });
+            }}
+          >
+            {THEMES.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+          <button className="ghost sm" onClick={onExit}>
+            End game
+          </button>
+        </span>
       </header>
 
       {game.phase === 'lobby' && (
@@ -187,11 +303,36 @@ function Room({ game, setGame, onExit }: { game: Game; setGame: SetGame; onExit:
             </span>
           </div>
           <h1 className="qtext">{q.text}</h1>
-          <Choices
-            choices={q.choices}
-            answer={game.phase === 'reveal' ? q.answer : null}
-            counts={game.phase === 'reveal' ? counts(game) : null}
-          />
+          {q.kind === 'number' ? (
+            game.phase === 'question' ? (
+              <p className="guess-hint">Type your closest guess on your phone!</p>
+            ) : (
+              <div className="guess-reveal">
+                <div className="actual">
+                  <span className="muted">Actual</span>
+                  <b>{fmtNum(q.answer, q.pre, q.suf)}</b>
+                </div>
+                <ol className="board">
+                  {near.slice(0, 8).map((x) => (
+                      <li key={x.id} className={x.err === near[0].err ? 'win' : ''}>
+                        <span>{x.name}</span>
+                        <span className="muted small">
+                          {x.err ? `off by ${fmtNum(x.err, q.pre, q.suf)}` : 'exact!'}
+                        </span>
+                        <b>{fmtNum(x.guess, q.pre, q.suf)}</b>
+                      </li>
+                    ))}
+                </ol>
+                {!answered && <p className="muted">Nobody guessed.</p>}
+              </div>
+            )
+          ) : (
+            <Choices
+              choices={q.choices}
+              answer={game.phase === 'reveal' ? q.answer : null}
+              counts={game.phase === 'reveal' ? counts(game) : null}
+            />
+          )}
           <div className="actions">
             <button onClick={go}>{game.phase === 'question' ? 'Skip' : 'Next'}</button>
           </div>
