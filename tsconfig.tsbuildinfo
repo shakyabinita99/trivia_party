@@ -1,0 +1,1 @@
+{"root":["./src/Choices.tsx","./src/main.tsx","./src/vite-env.d.ts","./src/host/Host.tsx","./src/host/game.ts","./src/lib/questions.ts","./src/lib/supabase.ts","./src/lib/types.ts","./src/lib/util.ts","./src/play/Play.tsx","./vite.config.ts"],"version":"5.9.3"}
