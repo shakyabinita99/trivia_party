@@ -84,6 +84,8 @@ function Live({ session, onLeave }: { session: Session; onLeave: (msg?: string) 
   const chan = useRef<RealtimeChannel | null>(null);
   const stRef = useRef<PubState | null>(null);
   const misses = useRef(0);
+  const subscribed = useRef(false);
+  const netErr = useRef('');
   const leaveRef = useRef(onLeave);
   leaveRef.current = onLeave;
 
@@ -99,7 +101,14 @@ function Live({ session, onLeave }: { session: Session; onLeave: (msg?: string) 
       applyTheme(s.theme);
       store.set('trivia-theme', s.theme);
       setDeadline(s.phase === 'question' ? Date.now() + s.remaining : 0);
-    }).subscribe((status) => status === 'SUBSCRIBED' && sendJoin());
+    }).subscribe((status, err) => {
+      subscribed.current = status === 'SUBSCRIBED';
+      if (subscribed.current) sendJoin();
+      else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        netErr.current = err?.message || status;
+        console.error('Realtime', status, err);
+      }
+    });
     chan.current = ch;
 
     // Retry join until the host lists us; give up if the PIN is wrong or we were removed.
@@ -107,8 +116,14 @@ function Live({ session, onLeave }: { session: Session; onLeave: (msg?: string) 
       const s = stRef.current;
       if (s?.players[id]) return;
       misses.current++;
-      if (misses.current >= 5) {
-        leaveRef.current(s ? 'You were removed from the game.' : 'Game not found. Check the PIN.');
+      if (misses.current >= 8) {
+        leaveRef.current(
+          s
+            ? 'You were removed from the game.'
+            : !subscribed.current
+              ? `Can't connect to the game server${netErr.current ? ` (${netErr.current})` : ''}.`
+              : 'Game not found. Check the PIN and that the host screen is open.',
+        );
         return;
       }
       sendJoin();

@@ -167,6 +167,7 @@ function Room({ game, setGame, onExit }: { game: Game; setGame: SetGame; onExit:
   const ref = useRef(game);
   ref.current = game;
   const [live, setLive] = useState(false);
+  const [netErr, setNetErr] = useState('');
   const [qr, setQr] = useState('');
 
   const joinUrl = `${location.origin}/?pin=${game.pin}`;
@@ -180,7 +181,14 @@ function Room({ game, setGame, onExit }: { game: Game; setGame: SetGame; onExit:
     const ch = supabase!.channel(room(game.pin), { config: { broadcast: { self: false } } });
     ch.on('broadcast', { event: 'join' }, ({ payload }) => setGame((g) => g && join(g, payload as JoinMsg)))
       .on('broadcast', { event: 'answer' }, ({ payload }) => setGame((g) => g && answer(g, payload as AnswerMsg)))
-      .subscribe((s) => setLive(s === 'SUBSCRIBED'));
+      .subscribe((s, err) => {
+        setLive(s === 'SUBSCRIBED');
+        if (s === 'SUBSCRIBED') setNetErr('');
+        else if (s === 'CHANNEL_ERROR' || s === 'TIMED_OUT') {
+          setNetErr(err?.message || s);
+          console.error('Realtime', s, err);
+        }
+      });
     chan.current = ch;
     return () => {
       supabase!.removeChannel(ch);
@@ -228,7 +236,7 @@ function Room({ game, setGame, onExit }: { game: Game; setGame: SetGame; onExit:
       <header className="top">
         <span className="brand sm">Trivia Party</span>
         <span className="muted">
-          PIN <b>{pinText}</b> · {list.length} players {!live && <span className="error">· connecting…</span>}
+          PIN <b>{pinText}</b> · {list.length} players {!live && <span className="error">· {netErr ? `can't connect: ${netErr}` : 'connecting…'}</span>}
         </span>
         <span className="gap">
           <select
