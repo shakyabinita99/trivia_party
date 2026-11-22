@@ -227,6 +227,8 @@ textarea { font-family: ui-monospace, Menlo, monospace; font-size: 14px; resize:
 .phone { border-radius: 32px; border-width: 6px; min-height: 560px; }
 .phone .choices { grid-template-columns: 1fr; gap: 10px; }
 .phone .choice { min-height: 60px; font-size: 18px; }
+.phone .result { text-align: center; padding: 24px 12px; }
+.phone > .muted.small, .phone > button.sm { align-self: center; text-align: center; }
 .tv .qtext { font-size: clamp(22px, 3.2vw, 40px); padding: 8px 0; }
 .frame-label { margin: 0; text-transform: uppercase; letter-spacing: 1px; }
 .center { text-align: center; }

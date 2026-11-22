@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import Choices from '../Choices';
 import Framed from '../Framed';
+import GuessForm from '../GuessForm';
 import { uploadImage } from '../lib/images';
-import { fmtNum, type ImgPos, type Question } from '../lib/types';
+import { fmtNum, LETTERS, type ImgPos, type Question } from '../lib/types';
 
 type Props = {
   qs: Question[];
@@ -14,12 +15,15 @@ type Props = {
 export default function Preview({ qs, onImage, onClose }: Props) {
   const [i, setI] = useState(0);
   const [shown, setShown] = useState(false);
+  const [pick, setPick] = useState<number | null>(null);
   const q = qs[Math.min(i, qs.length - 1)];
   const isNum = q.kind === 'number';
+  const revealed = shown || pick !== null;
 
   const go = (d: number) => {
     setI((n) => Math.min(Math.max(n + d, 0), qs.length - 1));
     setShown(false);
+    setPick(null);
   };
 
   useEffect(() => {
@@ -77,7 +81,7 @@ export default function Preview({ qs, onImage, onClose }: Props) {
           <Framed q={q}>
             <h1 className="qtext">{q.text}</h1>
             {isNum ? (
-              shown ? (
+              revealed ? (
                 <div className="actual">
                   <span className="muted">Actual</span>
                   <b>{fmtNum(q.answer, q.pre, q.suf)}</b>
@@ -86,7 +90,7 @@ export default function Preview({ qs, onImage, onClose }: Props) {
                 <p className="guess-hint">Type your closest guess on your phone!</p>
               )
             ) : (
-              <Choices choices={q.choices} answer={shown ? q.answer : null} />
+              <Choices choices={q.choices} answer={revealed ? q.answer : null} />
             )}
           </Framed>
         </section>
@@ -99,24 +103,73 @@ export default function Preview({ qs, onImage, onClose }: Props) {
             </span>
             <span className="timer sm">{q.time}</span>
           </div>
-          {q.img && <img className="pimg" src={q.img} alt="" />}
-          <p className="ptext">{q.text}</p>
-          {isNum ? (
-            <div className="guess">
-              <div className="guess-input">
-                {q.pre && <span>{q.pre}</span>}
-                <input placeholder="Your guess" readOnly tabIndex={-1} />
-                {q.suf && <span>{q.suf}</span>}
-              </div>
-              <button disabled>Lock in</button>
-            </div>
+          {pick !== null ? (
+            <PhoneResult q={q} pick={pick} onRetry={() => setPick(null)} />
           ) : (
-            <Choices choices={q.choices} picked={shown ? q.answer : null} />
+            <>
+              {q.img && <img className="pimg" src={q.img} alt="" />}
+              <p className="ptext">{q.text}</p>
+              {isNum ? (
+                <GuessForm key={i} pre={q.pre ?? ''} suf={q.suf ?? ''} onSubmit={setPick} autoFocus={false} />
+              ) : shown ? (
+                <Choices choices={q.choices} picked={q.answer} />
+              ) : (
+                <Choices choices={q.choices} onPick={setPick} />
+              )}
+            </>
           )}
         </section>
       </div>
-      <p className="muted small center">← → to move · Space to show the answer · Esc to close</p>
+      <p className="muted small center">Answer on the phone to see what players see · ← → to move · Space to show the answer · Esc to close</p>
     </main>
+  );
+}
+
+/** The result screen a player sees after the reveal, for a single test answer. */
+function PhoneResult({ q, pick, onRetry }: { q: Question; pick: number; onRetry: () => void }) {
+  let cls: string, title: string, pts: string, line;
+  if (q.kind === 'number') {
+    const err = Math.abs(pick - q.answer);
+    const near = Math.round(500 * Math.max(0, 1 - err / Math.max(Math.abs(q.answer), 1)));
+    cls = err === 0 ? 'good' : near ? 'near' : 'bad';
+    title = err === 0 ? 'Spot on!' : `Off by ${fmtNum(err, q.pre, q.suf)}`;
+    pts = err === 0 ? '+1000' : `+${near}`;
+    line = (
+      <>
+        Actual <b>{fmtNum(q.answer, q.pre, q.suf)}</b> · you guessed {fmtNum(pick, q.pre, q.suf)}
+      </>
+    );
+  } else {
+    const ok = pick === q.answer;
+    cls = ok ? 'good' : 'bad';
+    title = ok ? 'Correct!' : 'Not quite';
+    pts = ok ? '+1000' : '+0';
+    line = (
+      <>
+        Answer:{' '}
+        <b>
+          {LETTERS[q.answer]} · {q.choices[q.answer]}
+        </b>
+        {!ok && <> · you picked {LETTERS[pick]}</>}
+      </>
+    );
+  }
+  return (
+    <>
+      <div className={`result ${cls}`}>
+        <h2>{title}</h2>
+        <p className="big">{pts}</p>
+        <p className="answer-line">{line}</p>
+      </div>
+      <p className="muted small">
+        {q.kind === 'number'
+          ? 'In the game the closest guess in the room gets 1000 instead; everyone else gets up to 500 by how close they were.'
+          : 'In the game a correct answer scores 500–1000; the faster, the more.'}
+      </p>
+      <button className="ghost sm" onClick={onRetry}>
+        Try again
+      </button>
+    </>
   );
 }
 
@@ -186,7 +239,12 @@ function ImageBar({
       onChange(await uploadImage(f), pos);
       setMsg('');
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Upload failed.');
+      const why = (e instanceof Error ? e.message : 'Upload failed').replace(/\.?$/, '.');
+      setMsg(
+        f.name === 'pasted'
+          ? `${why} Or click the picture on Google first, then right-click the big one → "Copy image address".`
+          : why,
+      );
     } finally {
       setBusy(false);
       if (file.current) file.current.value = '';
@@ -207,13 +265,55 @@ function ImageBar({
     setMsg('');
   };
 
+  /** A copied picture (or a data: link, which Google Images gives for thumbnails) is uploaded. */
+  const useImage = async (blob: Blob) => {
+    await upload(new File([blob], 'pasted', { type: blob.type || 'image/png' }));
+  };
+
+  const useText = async (raw: string) => {
+    const t = raw.trim();
+    if (/^data:image\//i.test(t)) return useImage(await (await fetch(t)).blob());
+    return useLink(t);
+  };
+
   const paste = async () => {
     try {
-      await useLink(await navigator.clipboard.readText());
+      if (navigator.clipboard.read) {
+        for (const item of await navigator.clipboard.read()) {
+          const type = item.types.find((t) => t.startsWith('image/'));
+          if (type) return await useImage(await item.getType(type));
+          if (item.types.includes('text/plain'))
+            return await useText(await (await item.getType('text/plain')).text());
+        }
+        return setMsg('The clipboard is empty. Right-click a picture and choose "Copy image address" first.');
+      }
+      await useText(await navigator.clipboard.readText());
     } catch {
-      setMsg('Could not read the clipboard. Paste the link into the box instead.');
+      setMsg('Could not read the clipboard. Click the box below and press Ctrl/Cmd+V instead.');
     }
   };
+
+  /** Ctrl/Cmd+V anywhere on the preview (or in the link box) uses whatever was copied. */
+  const onPaste = (e: ClipboardEvent | React.ClipboardEvent) => {
+    const d = e.clipboardData;
+    if (!d) return;
+    const f = [...d.files].find((x) => x.type.startsWith('image/'));
+    const text = d.getData('text/plain');
+    if (!f && !text.trim()) return;
+    e.preventDefault();
+    if (f) void upload(f);
+    else void useText(text);
+  };
+  const pasteRef = useRef(onPaste);
+  pasteRef.current = onPaste;
+  useEffect(() => {
+    const h = (e: ClipboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      pasteRef.current(e);
+    };
+    window.addEventListener('paste', h);
+    return () => window.removeEventListener('paste', h);
+  }, []);
 
   const find = () =>
     window.open(`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(searchTerms(q))}`, '_blank', 'noopener');
@@ -236,10 +336,11 @@ function ImageBar({
         placeholder="…or paste an image link here"
         value={url}
         onChange={(e) => setUrl(e.target.value)}
-        onKeyDown={(e) => e.key === 'Enter' && void useLink(url)}
+        onPaste={onPaste}
+        onKeyDown={(e) => e.key === 'Enter' && void useText(url)}
       />
       {url && (
-        <button className="ghost sm" disabled={busy} onClick={() => void useLink(url)}>
+        <button className="ghost sm" disabled={busy} onClick={() => void useText(url)}>
           Use link
         </button>
       )}

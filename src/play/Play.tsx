@@ -4,6 +4,7 @@ import { room, supabase } from '../lib/supabase';
 import { fmtNum, LETTERS, type PubState } from '../lib/types';
 import { ordinal, playerId, store, useNow } from '../lib/util';
 import Choices from '../Choices';
+import GuessForm from '../GuessForm';
 import { applyTheme } from '../lib/themes';
 
 const SESSION_KEY = 'trivia-session';
@@ -243,36 +244,6 @@ function Live({ session, onLeave }: { session: Session; onLeave: (msg?: string) 
         </>
       )}
     </Shell>
-  );
-}
-
-function GuessForm({ pre, suf, onSubmit }: { pre: string; suf: string; onSubmit: (n: number) => void }) {
-  const [v, setV] = useState('');
-  const n = Number(v.replace(/,/g, ''));
-  const valid = v.trim() !== '' && Number.isFinite(n) && Math.abs(n) <= 1e12;
-  return (
-    <form
-      className="guess"
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (valid) onSubmit(n);
-      }}
-    >
-      <div className="guess-input">
-        {pre && <span>{pre}</span>}
-        <input
-          autoFocus
-          inputMode="decimal"
-          placeholder="Your guess"
-          value={v}
-          onChange={(e) => setV(e.target.value.replace(/[^\d.,-]/g, ''))}
-        />
-        {suf && <span>{suf}</span>}
-      </div>
-      <button type="submit" disabled={!valid}>
-        Lock in
-      </button>
-    </form>
   );
 }
 
