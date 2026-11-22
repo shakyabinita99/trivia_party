@@ -196,7 +196,6 @@ function Room({ game, setGame, onExit }: { game: Game; setGame: SetGame; onExit:
   ref.current = game;
   const [live, setLive] = useState(false);
   const [netErr, setNetErr] = useState('');
-  const [showBoard, setShowBoard] = useState(false);
   const [qr, setQr] = useState('');
 
   const joinUrl = `${location.origin}/?pin=${game.pin}`;
@@ -257,7 +256,8 @@ function Room({ game, setGame, onExit }: { game: Game; setGame: SetGame; onExit:
   const list = ranked(game);
   const answered = Object.keys(game.answers).filter((id) => game.players[id]).length;
   const near = q.kind === 'number' && game.phase === 'reveal' ? guesses(game) : [];
-  const go = () => setGame((g) => g && advance(g));
+  const go = () => setGame((g) => g && { ...advance(g), showBoard: false });
+  const setBoard = (showBoard: boolean) => setGame((g) => g && { ...g, showBoard });
   const pinText = `${game.pin.slice(0, 3)} ${game.pin.slice(3)}`;
 
   return (
@@ -283,7 +283,7 @@ function Room({ game, setGame, onExit }: { game: Game; setGame: SetGame; onExit:
               </option>
             ))}
           </select>
-          <button className="ghost sm" disabled={!list.length} onClick={() => setShowBoard(true)}>
+          <button className="ghost sm" disabled={!list.length} onClick={() => setBoard(true)}>
             Leaderboard
           </button>
           <button className="ghost sm" onClick={onExit}>
@@ -406,12 +406,12 @@ function Room({ game, setGame, onExit }: { game: Game; setGame: SetGame; onExit:
         </section>
       )}
 
-      {showBoard && (
+      {game.showBoard && (
         <div className="overlay" role="dialog" aria-label="Leaderboard">
           <section className="stage">
             <div className="row">
               <h1 className="qtext">Leaderboard</h1>
-              <button className="ghost" onClick={() => setShowBoard(false)}>
+              <button className="ghost" onClick={() => setBoard(false)}>
                 Close
               </button>
             </div>

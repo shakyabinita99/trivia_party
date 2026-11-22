@@ -3,7 +3,16 @@ const MEDALS = ['🥇', '🥈', '🥉'];
 type Row = { id: string; name: string; score: number };
 
 /** Bar chart for the top 3 plus a scrollable list of every player. */
-export default function Leaderboard({ list, last = {} }: { list: Row[]; last?: Record<string, number> }) {
+export default function Leaderboard({
+  list,
+  last = {},
+  me,
+}: {
+  list: Row[];
+  last?: Record<string, number>;
+  /** Highlight this player (on their phone). */
+  me?: string;
+}) {
   const rank = (p: Row) => 1 + list.filter((o) => o.score > p.score).length;
   const top = list.slice(0, 3);
   const max = Math.max(1, ...top.map((p) => p.score));
@@ -30,7 +39,7 @@ export default function Leaderboard({ list, last = {} }: { list: Row[]; last?: R
 
       <ol className="all">
         {list.map((p) => (
-          <li key={p.id} className={rank(p) <= 3 ? 'top' : ''}>
+          <li key={p.id} className={`${rank(p) <= 3 ? 'top' : ''} ${p.id === me ? 'me' : ''}`}>
             <span className="rk">{rank(p)}</span>
             <span className="nm">{p.name}</span>
             <span className="muted small">{last[p.id] ? `+${last[p.id]}` : ''}</span>

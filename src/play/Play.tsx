@@ -4,6 +4,8 @@ import { room, supabase } from '../lib/supabase';
 import { fmtNum, LETTERS, type PubState } from '../lib/types';
 import { ordinal, playerId, store, useNow } from '../lib/util';
 import Choices from '../Choices';
+import AnswerBars from '../AnswerBars';
+import Leaderboard from '../host/Leaderboard';
 import GuessForm from '../GuessForm';
 import { applyTheme } from '../lib/themes';
 
@@ -159,11 +161,38 @@ function Live({ session, onLeave }: { session: Session; onLeave: (msg?: string) 
     void chan.current?.send({ type: 'broadcast', event: 'answer', payload: { id, q: st.q, choice: c } });
   };
   const myPick = picked?.q === st.q ? picked.c : null;
+  const list = Object.entries(st.players)
+    .map(([pid, p]) => ({ id: pid, name: p.name, score: p.score }))
+    .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
+  const last = Object.fromEntries(Object.entries(st.players).map(([pid, p]) => [pid, p.pts]));
+  // The host's leaderboard (button, between questions, final results) shows on every phone too.
+  const boardView = st.phase === 'board' || st.phase === 'end' || (st.board && st.phase !== 'question');
   const left = Math.max(0, Math.ceil((deadline - now) / 1000));
 
   return (
     <Shell name={me.name} score={me.score} onLeave={() => confirm('Leave the game?') && onLeave()}>
-      {st.phase === 'lobby' && (
+      {boardView && (
+        <div className="pboard">
+          {st.phase === 'end' ? (
+            <>
+              <h2 className="medal-big">{me.rank <= 3 ? ['🥇', '🥈', '🥉'][me.rank - 1] : '🎉'}</h2>
+              <h2>You finished {ordinal(me.rank)}</h2>
+            </>
+          ) : (
+            <>
+              <h2>Leaderboard</h2>
+              <p className="muted">
+                You're {ordinal(me.rank)} with {me.score} pts
+                {st.phase === 'board' && me.pts ? ` (+${me.pts} last question)` : ''}
+              </p>
+            </>
+          )}
+          <Leaderboard list={list} last={st.phase === 'board' ? last : {}} me={id} />
+          {st.phase === 'board' && <p className="muted small">Next question coming up…</p>}
+        </div>
+      )}
+
+      {!boardView && st.phase === 'lobby' && (
         <>
           <h2>You're in!</h2>
           <p className="muted">Look for your name on the big screen.</p>
@@ -200,7 +229,23 @@ function Live({ session, onLeave }: { session: Session; onLeave: (msg?: string) 
           </>
         ))}
 
-      {(st.phase === 'reveal' || st.phase === 'board') && (
+      {!boardView && st.phase === 'reveal' && st.kind === 'choice' && st.answer !== null && (
+        <div className="preveal">
+          <div className={`result-mini ${me.ok ? 'good' : 'bad'}`}>
+            {me.ok ? `✓ Correct! +${me.pts}` : me.voted ? '✗ Not quite · +0' : "⏱ Time's up · +0"}
+          </div>
+          <p className="muted">The correct answer is</p>
+          <h2 className="answer-big">
+            {LETTERS[st.answer]} · {st.choices[st.answer]}
+          </h2>
+          {st.counts && <AnswerBars choices={st.choices} counts={st.counts} answer={st.answer} picked={me.guess} />}
+          <p className="muted small">
+            {ordinal(me.rank)} place · {me.score} pts
+          </p>
+        </div>
+      )}
+
+      {!boardView && st.phase === 'reveal' && st.kind === 'number' && (
         <>
           <div className={`result ${me.ok ? 'good' : st.kind === 'number' && me.pts ? 'near' : 'bad'}`}>
             <h2>
@@ -238,15 +283,6 @@ function Live({ session, onLeave }: { session: Session; onLeave: (msg?: string) 
               {ordinal(me.rank)} place · {me.score} pts
             </p>
           </div>
-          {st.phase === 'board' && <p className="muted">Next question coming up…</p>}
-        </>
-      )}
-
-      {st.phase === 'end' && (
-        <>
-          <h2>{me.rank <= 3 ? ['🥇', '🥈', '🥉'][me.rank - 1] : '🎉'}</h2>
-          <h2>You finished {ordinal(me.rank)}</h2>
-          <p className="big">{me.score}</p>
         </>
       )}
     </Shell>

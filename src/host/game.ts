@@ -12,6 +12,8 @@ export type Game = {
   answers: Record<string, { choice: number; pts: number }>;
   last: Record<string, number>;
   banned: string[];
+  /** Leaderboard overlay open on the host (mirrored on phones). */
+  showBoard?: boolean;
 };
 
 const MAX_PLAYERS = 60;
@@ -165,7 +167,7 @@ export function publicState(g: Game): PubState {
       pts: g.last[p.id] ?? 0,
       voted: Boolean(a),
       ok: !shown ? null : isNum ? !!mine && mine.err === near[0].err : a?.choice === q.answer,
-      guess: isNum && shown && a ? a.choice : null,
+      guess: shown && a ? a.choice : null,
       place: mine ? 1 + near.filter((x) => x.err < mine.err).length : 0,
     };
   }
@@ -182,6 +184,8 @@ export function publicState(g: Game): PubState {
     choices: g.phase === 'lobby' ? [] : q.choices,
     remaining: g.phase === 'question' ? Math.max(0, g.startAt + q.time * 1000 - Date.now()) : 0,
     answer: shown ? q.answer : null,
+    board: Boolean(g.showBoard),
+    counts: shown && !isNum ? counts(g) : null,
     players,
   };
 }

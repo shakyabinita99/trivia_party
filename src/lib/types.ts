@@ -25,6 +25,7 @@ export type PubPlayer = {
   pts: number;
   voted: boolean;
   ok: boolean | null;
+  /** The player's answer once revealed: the guess (number questions) or choice index. */
   guess: number | null;
   place: number;
 };
@@ -43,6 +44,10 @@ export type PubState = {
   choices: string[];
   remaining: number;
   answer: number | null;
+  /** Host has the leaderboard overlay open. */
+  board: boolean;
+  /** How many players picked each choice (choice questions, once revealed). */
+  counts: number[] | null;
   players: Record<string, PubPlayer>;
 };
 
