@@ -4,10 +4,11 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 import { room, supabase } from '../lib/supabase';
 import { PRESETS } from '../lib/presets';
 import { parse, QUESTIONS_KEY, SAMPLE, setImage } from '../lib/questions';
-import { fmtNum, type AnswerMsg, type JoinMsg, type Question } from '../lib/types';
+import { fmtNum, LETTERS, type AnswerMsg, type JoinMsg, type Question } from '../lib/types';
 import { applyTheme, isTheme, THEMES, type ThemeId } from '../lib/themes';
 import { store, useNow } from '../lib/util';
 import Choices from '../Choices';
+import AnswerBars from '../AnswerBars';
 import Preview from './Preview';
 import Framed from '../Framed';
 import Leaderboard from './Leaderboard';
@@ -33,7 +34,6 @@ export default function Host() {
   const [game, setGame] = useState<Game | null>(() => store.get<Game>(GAME_KEY));
 
   const exit = () => {
-    if (!confirm('End this game for everyone?')) return;
     store.del(GAME_KEY);
     setGame(null);
   };
@@ -257,6 +257,12 @@ function Room({ game, setGame, onExit }: { game: Game; setGame: SetGame; onExit:
   const answered = Object.keys(game.answers).filter((id) => game.players[id]).length;
   const near = q.kind === 'number' && game.phase === 'reveal' ? guesses(game) : [];
   const go = () => setGame((g) => g && { ...advance(g), showBoard: false });
+  const endGame = async () => {
+    if (!confirm('End this game for everyone?')) return;
+    // Tell phones first so they leave the game instead of waiting for a host that's gone.
+    await chan.current?.send({ type: 'broadcast', event: 'ended', payload: {} }).catch(() => {});
+    onExit();
+  };
   const setBoard = (showBoard: boolean) => setGame((g) => g && { ...g, showBoard });
   const pinText = `${game.pin.slice(0, 3)} ${game.pin.slice(3)}`;
 
@@ -286,7 +292,7 @@ function Room({ game, setGame, onExit }: { game: Game; setGame: SetGame; onExit:
           <button className="ghost sm" disabled={!list.length} onClick={() => setBoard(true)}>
             Leaderboard
           </button>
-          <button className="ghost sm" onClick={onExit}>
+          <button className="ghost sm" onClick={() => void endGame()}>
             End game
           </button>
         </span>
@@ -370,15 +376,29 @@ function Room({ game, setGame, onExit }: { game: Game; setGame: SetGame; onExit:
                 </div>
               )
             ) : (
-              <Choices
-                choices={q.choices}
-                answer={game.phase === 'reveal' ? q.answer : null}
-                counts={game.phase === 'reveal' ? counts(game) : null}
-              />
+              game.phase === 'reveal' ? (
+                <div className="host-reveal">
+                  <p className="answer-line">
+                    <span className="muted">The correct answer is </span>
+                    <b className="answer-big">
+                      {LETTERS[q.answer]} · {q.choices[q.answer]}
+                    </b>
+                  </p>
+                  <AnswerBars choices={q.choices} counts={counts(game)} answer={q.answer} />
+                </div>
+              ) : (
+                <Choices choices={q.choices} />
+              )
             )}
           </Framed>
           <div className="actions">
-            <button onClick={go}>{game.phase === 'question' ? 'Skip' : 'Next'}</button>
+            <button onClick={go}>
+              {game.phase === 'question'
+                ? 'Skip'
+                : game.q + 1 < game.questions.length
+                  ? 'Next question'
+                  : 'Final results'}
+            </button>
           </div>
         </section>
       )}
@@ -401,7 +421,7 @@ function Room({ game, setGame, onExit }: { game: Game; setGame: SetGame; onExit:
             <button className="ghost" onClick={() => setGame((g) => g && replay(g))}>
               Play again
             </button>
-            <button onClick={onExit}>New game</button>
+            <button onClick={() => void endGame()}>New game</button>
           </div>
         </section>
       )}

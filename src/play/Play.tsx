@@ -97,6 +97,7 @@ function Live({ session, onLeave }: { session: Session; onLeave: (msg?: string) 
     const ch = supabase!.channel(room(session.pin), { config: { broadcast: { self: false } } });
     const sendJoin = () => void ch.send({ type: 'broadcast', event: 'join', payload: { id, name: session.name } });
 
+    ch.on('broadcast', { event: 'ended' }, () => leaveRef.current('The host ended the game. Thanks for playing!'));
     ch.on('broadcast', { event: 'state' }, ({ payload }) => {
       const s = payload as PubState;
       stRef.current = s;
@@ -166,7 +167,7 @@ function Live({ session, onLeave }: { session: Session; onLeave: (msg?: string) 
     .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
   const last = Object.fromEntries(Object.entries(st.players).map(([pid, p]) => [pid, p.pts]));
   // The host's leaderboard (button, between questions, final results) shows on every phone too.
-  const boardView = st.phase === 'board' || st.phase === 'end' || (st.board && st.phase !== 'question');
+  const boardView = st.phase === 'end' || (st.board && st.phase !== 'question');
   const left = Math.max(0, Math.ceil((deadline - now) / 1000));
 
   return (
@@ -183,12 +184,11 @@ function Live({ session, onLeave }: { session: Session; onLeave: (msg?: string) 
               <h2>Leaderboard</h2>
               <p className="muted">
                 You're {ordinal(me.rank)} with {me.score} pts
-                {st.phase === 'board' && me.pts ? ` (+${me.pts} last question)` : ''}
+                {me.pts ? ` (+${me.pts} last question)` : ''}
               </p>
             </>
           )}
-          <Leaderboard list={list} last={st.phase === 'board' ? last : {}} me={id} />
-          {st.phase === 'board' && <p className="muted small">Next question coming up…</p>}
+          <Leaderboard list={list} last={st.phase === 'end' ? {} : last} me={id} />
         </div>
       )}
 

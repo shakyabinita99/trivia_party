@@ -131,7 +131,8 @@ export function advance(g: Game): Game {
     case 'question':
       return reveal(g);
     case 'reveal':
-      return { ...g, phase: g.q + 1 < g.questions.length ? 'board' : 'end' };
+      // Straight on to the next question; the leaderboard shows only when the host opens it.
+      return g.q + 1 < g.questions.length ? start(g, g.q + 1) : { ...g, phase: 'end' };
     case 'board':
       return start(g, g.q + 1);
     default:
