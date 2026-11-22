@@ -170,6 +170,7 @@ export function publicState(g: Game): PubState {
     theme: g.theme ?? 'party',
     kind: isNum ? 'number' : 'choice',
     pre: q.pre ?? '',
+    img: g.phase === 'question' || g.phase === 'reveal' ? (q.img ?? '') : '',
     suf: q.suf ?? '',
     q: g.q,
     total: g.questions.length,

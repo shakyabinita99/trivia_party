@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { room, supabase } from '../lib/supabase';
-import { fmtNum, type PubState } from '../lib/types';
+import { fmtNum, LETTERS, type PubState } from '../lib/types';
 import { ordinal, playerId, store, useNow } from '../lib/util';
 import Choices from '../Choices';
 import { applyTheme } from '../lib/themes';
@@ -183,6 +183,7 @@ function Live({ session, onLeave }: { session: Session; onLeave: (msg?: string) 
               </span>
               <span className={`timer sm ${left <= 5 ? 'warn' : ''}`}>{left}</span>
             </div>
+            {st.img && <img className="pimg" src={st.img} alt="" />}
             <p className="ptext">{st.text}</p>
             {st.kind === 'number' ? (
               <GuessForm key={st.q} pre={st.pre} suf={st.suf} onSubmit={pick} />
@@ -192,31 +193,45 @@ function Live({ session, onLeave }: { session: Session; onLeave: (msg?: string) 
           </>
         ))}
 
-      {st.phase === 'reveal' && st.kind === 'number' && (
-        <div className={`result ${me.ok ? 'good' : me.pts ? 'near' : 'bad'}`}>
-          <h2>{me.ok ? 'Closest!' : me.voted ? `${ordinal(me.place)} closest` : "Time's up"}</h2>
-          <p className="big">+{me.pts}</p>
-          <p>
-            Actual {fmtNum(st.answer ?? 0, st.pre, st.suf)}
-            {me.guess !== null && ` · you guessed ${fmtNum(me.guess, st.pre, st.suf)}`}
-          </p>
-          <p>You're in {ordinal(me.rank)} place</p>
-        </div>
-      )}
-
-      {st.phase === 'reveal' && st.kind !== 'number' && (
-        <div className={`result ${me.ok ? 'good' : 'bad'}`}>
-          <h2>{me.ok ? 'Correct!' : me.voted ? 'Not quite' : "Time's up"}</h2>
-          <p className="big">{me.ok ? `+${me.pts}` : '+0'}</p>
-          <p>You're in {ordinal(me.rank)} place</p>
-        </div>
-      )}
-
-      {st.phase === 'board' && (
+      {(st.phase === 'reveal' || st.phase === 'board') && (
         <>
-          <h2>{ordinal(me.rank)} place</h2>
-          <p className="big">{me.score}</p>
-          <p className="muted">Next question coming up…</p>
+          <div className={`result ${me.ok ? 'good' : st.kind === 'number' && me.pts ? 'near' : 'bad'}`}>
+            <h2>
+              {st.kind === 'number'
+                ? me.ok
+                  ? 'Closest!'
+                  : me.voted
+                    ? `${ordinal(me.place)} closest`
+                    : "Time's up"
+                : me.ok
+                  ? 'Correct!'
+                  : me.voted
+                    ? 'Not quite'
+                    : "Time's up"}
+            </h2>
+            <p className="big">+{me.pts}</p>
+            {st.answer !== null && (
+              <p className="answer-line">
+                {st.kind === 'number' ? (
+                  <>
+                    Actual <b>{fmtNum(st.answer, st.pre, st.suf)}</b>
+                    {me.guess !== null && <> · you guessed {fmtNum(me.guess, st.pre, st.suf)}</>}
+                  </>
+                ) : (
+                  <>
+                    Answer:{' '}
+                    <b>
+                      {LETTERS[st.answer]} · {st.choices[st.answer]}
+                    </b>
+                  </>
+                )}
+              </p>
+            )}
+            <p>
+              {ordinal(me.rank)} place · {me.score} pts
+            </p>
+          </div>
+          {st.phase === 'board' && <p className="muted">Next question coming up…</p>}
         </>
       )}
 

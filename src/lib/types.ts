@@ -7,7 +7,11 @@ export type Question = {
   kind?: 'choice' | 'number';
   pre?: string;
   suf?: string;
+  img?: string;
+  pos?: ImgPos;
 };
+
+export type ImgPos = 'side' | 'top';
 
 export const fmtNum = (n: number, pre = '', suf = '') =>
   `${pre}${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}${suf ? ` ${suf}` : ''}`;
@@ -32,6 +36,7 @@ export type PubState = {
   kind: 'choice' | 'number';
   pre: string;
   suf: string;
+  img: string;
   q: number;
   total: number;
   text: string;

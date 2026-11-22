@@ -2,12 +2,14 @@ import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateActio
 import QRCode from 'qrcode';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { room, supabase } from '../lib/supabase';
-import { parse, QUESTIONS_KEY, SAMPLE } from '../lib/questions';
+import { parse, QUESTIONS_KEY, SAMPLE, setImage } from '../lib/questions';
 import { fmtNum, type AnswerMsg, type JoinMsg, type Question } from '../lib/types';
 import { applyTheme, isTheme, THEMES, type ThemeId } from '../lib/themes';
 import { store, useNow } from '../lib/util';
 import Choices from '../Choices';
 import Preview from './Preview';
+import Framed from '../Framed';
+import Leaderboard from './Leaderboard';
 import {
   advance,
   answer,
@@ -96,7 +98,14 @@ function Setup({ onCreate }: { onCreate: (qs: Question[], theme: ThemeId) => voi
     if (!error) void refresh();
   };
 
-  if (previewing && qs.length) return <Preview qs={qs} onClose={() => setPreviewing(false)} />;
+  if (previewing && qs.length)
+    return (
+      <Preview
+        qs={qs}
+        onImage={(i, img, pos) => setSrc((s) => setImage(s, i, img, pos))}
+        onClose={() => setPreviewing(false)}
+      />
+    );
 
   return (
     <main className="page setup">
@@ -141,8 +150,8 @@ function Setup({ onCreate }: { onCreate: (qs: Question[], theme: ThemeId) => voi
         </div>
         <input value={name} maxLength={60} placeholder="Quiz name" onChange={(e) => setName(e.target.value)} />
         <p className="muted small">
-          One question per block, blank line between questions. Start choices with <code>-</code>, mark the correct
-          one with <code>*</code>. 2–4 choices each. For a closest-guess (price) round, use one line like{' '}
+          One question per block, blank line between questions. Start choices with <code>-</code>, mark the correct one
+          with <code>*</code>. 2–4 choices each. For a closest-guess (price) round, use one line like{' '}
           <code>= $499</code> instead of choices.
         </p>
         <textarea value={src} onChange={(e) => setSrc(e.target.value)} spellCheck={false} rows={16} />
@@ -175,6 +184,7 @@ function Room({ game, setGame, onExit }: { game: Game; setGame: SetGame; onExit:
   ref.current = game;
   const [live, setLive] = useState(false);
   const [netErr, setNetErr] = useState('');
+  const [showBoard, setShowBoard] = useState(false);
   const [qr, setQr] = useState('');
 
   const joinUrl = `${location.origin}/?pin=${game.pin}`;
@@ -243,7 +253,8 @@ function Room({ game, setGame, onExit }: { game: Game; setGame: SetGame; onExit:
       <header className="top">
         <span className="brand sm">Trivia Party</span>
         <span className="muted">
-          PIN <b>{pinText}</b> · {list.length} players {!live && <span className="error">· {netErr ? `can't connect: ${netErr}` : 'connecting…'}</span>}
+          PIN <b>{pinText}</b> · {list.length} players{' '}
+          {!live && <span className="error">· {netErr ? `can't connect: ${netErr}` : 'connecting…'}</span>}
         </span>
         <span className="gap">
           <select
@@ -260,6 +271,9 @@ function Room({ game, setGame, onExit }: { game: Game; setGame: SetGame; onExit:
               </option>
             ))}
           </select>
+          <button className="ghost sm" disabled={!list.length} onClick={() => setShowBoard(true)}>
+            Leaderboard
+          </button>
           <button className="ghost sm" onClick={onExit}>
             End game
           </button>
@@ -308,27 +322,24 @@ function Room({ game, setGame, onExit }: { game: Game; setGame: SetGame; onExit:
             <span className="muted">
               Question {game.q + 1} / {game.questions.length}
             </span>
-            {game.phase === 'question' ? (
-              <span className={`timer ${left <= 5 ? 'warn' : ''}`}>{left}</span>
-            ) : (
-              <span />
-            )}
+            {game.phase === 'question' ? <span className={`timer ${left <= 5 ? 'warn' : ''}`}>{left}</span> : <span />}
             <span className="muted">
               {answered} / {list.length} answered
             </span>
           </div>
-          <h1 className="qtext">{q.text}</h1>
-          {q.kind === 'number' ? (
-            game.phase === 'question' ? (
-              <p className="guess-hint">Type your closest guess on your phone!</p>
-            ) : (
-              <div className="guess-reveal">
-                <div className="actual">
-                  <span className="muted">Actual</span>
-                  <b>{fmtNum(q.answer, q.pre, q.suf)}</b>
-                </div>
-                <ol className="board">
-                  {near.slice(0, 8).map((x) => (
+          <Framed q={q}>
+            <h1 className="qtext">{q.text}</h1>
+            {q.kind === 'number' ? (
+              game.phase === 'question' ? (
+                <p className="guess-hint">Type your closest guess on your phone!</p>
+              ) : (
+                <div className="guess-reveal">
+                  <div className="actual">
+                    <span className="muted">Actual</span>
+                    <b>{fmtNum(q.answer, q.pre, q.suf)}</b>
+                  </div>
+                  <ol className="board">
+                    {near.slice(0, 8).map((x) => (
                       <li key={x.id} className={x.err === near[0].err ? 'win' : ''}>
                         <span>{x.name}</span>
                         <span className="muted small">
@@ -337,17 +348,18 @@ function Room({ game, setGame, onExit }: { game: Game; setGame: SetGame; onExit:
                         <b>{fmtNum(x.guess, q.pre, q.suf)}</b>
                       </li>
                     ))}
-                </ol>
-                {!answered && <p className="muted">Nobody guessed.</p>}
-              </div>
-            )
-          ) : (
-            <Choices
-              choices={q.choices}
-              answer={game.phase === 'reveal' ? q.answer : null}
-              counts={game.phase === 'reveal' ? counts(game) : null}
-            />
-          )}
+                  </ol>
+                  {!answered && <p className="muted">Nobody guessed.</p>}
+                </div>
+              )
+            ) : (
+              <Choices
+                choices={q.choices}
+                answer={game.phase === 'reveal' ? q.answer : null}
+                counts={game.phase === 'reveal' ? counts(game) : null}
+              />
+            )}
+          </Framed>
           <div className="actions">
             <button onClick={go}>{game.phase === 'question' ? 'Skip' : 'Next'}</button>
           </div>
@@ -357,15 +369,7 @@ function Room({ game, setGame, onExit }: { game: Game; setGame: SetGame; onExit:
       {game.phase === 'board' && (
         <section className="stage">
           <h1 className="qtext">Leaderboard</h1>
-          <ol className="board">
-            {list.slice(0, 5).map((p) => (
-              <li key={p.id}>
-                <span>{p.name}</span>
-                <span className="muted small">{game.last[p.id] ? `+${game.last[p.id]}` : ''}</span>
-                <b>{p.score}</b>
-              </li>
-            ))}
-          </ol>
+          <Leaderboard list={list} last={game.last} />
           <div className="actions">
             <button onClick={go}>Next question</button>
           </div>
@@ -375,28 +379,7 @@ function Room({ game, setGame, onExit }: { game: Game; setGame: SetGame; onExit:
       {game.phase === 'end' && (
         <section className="stage">
           <h1 className="qtext">Final results</h1>
-          <div className="podium">
-            {[1, 0, 2].map((i) =>
-              list[i] ? (
-                <div key={i} className={`step p${i + 1}`}>
-                  <span className="pname">{list[i].name}</span>
-                  <span className="muted">{list[i].score}</span>
-                  <div className="block">{i + 1}</div>
-                </div>
-              ) : null,
-            )}
-          </div>
-          {list.length > 3 && (
-            <ol className="board rest" start={4}>
-              {list.slice(3).map((p) => (
-                <li key={p.id}>
-                  <span>{p.name}</span>
-                  <span />
-                  <b>{p.score}</b>
-                </li>
-              ))}
-            </ol>
-          )}
+          <Leaderboard list={list} />
           <div className="actions">
             <button className="ghost" onClick={() => setGame((g) => g && replay(g))}>
               Play again
@@ -404,6 +387,20 @@ function Room({ game, setGame, onExit }: { game: Game; setGame: SetGame; onExit:
             <button onClick={onExit}>New game</button>
           </div>
         </section>
+      )}
+
+      {showBoard && (
+        <div className="overlay" role="dialog" aria-label="Leaderboard">
+          <section className="stage">
+            <div className="row">
+              <h1 className="qtext">Leaderboard</h1>
+              <button className="ghost" onClick={() => setShowBoard(false)}>
+                Close
+              </button>
+            </div>
+            <Leaderboard list={list} />
+          </section>
+        </div>
       )}
     </main>
   );

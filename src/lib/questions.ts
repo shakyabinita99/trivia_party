@@ -1,4 +1,4 @@
-import type { Question } from './types';
+import type { ImgPos, Question } from './types';
 
 export const SAMPLE = `What is the largest planet in our solar system?
 - Saturn
@@ -93,24 +93,53 @@ What is the hardest natural substance?
 
 export const QUESTIONS_KEY = 'trivia-questions';
 
+const IMG_RE = /^@image\s+(\S+)(?:\s+(top|side))?\s*$/i;
+
+const blocksOf = (src: string) =>
+  src
+    .replace(/\r/g, '')
+    .split(/\n\s*\n/)
+    .map((b) => b.trim())
+    .filter(Boolean);
+
+/** Set or clear the image of question `index` in the source text. */
+export function setImage(src: string, index: number, img: string | null, pos: ImgPos = 'side'): string {
+  const blocks = blocksOf(src);
+  if (!blocks[index]) return src;
+  const [text, ...rest] = blocks[index].split('\n').filter((l) => !IMG_RE.test(l.trim()));
+  blocks[index] = [text, ...(img ? [`@image ${img} ${pos}`] : []), ...rest].join('\n');
+  return blocks.join('\n\n');
+}
+
 type Parsed = { qs: Question[]; err: string | null };
 
 /**
  * Format: question line, then 2–4 choice lines starting with "-" (wrong) or "*" (correct),
  * or a single "= value" line for a closest-guess question (e.g. "= $1299", "= 42 kg").
+ * Optional "@image <url> [side|top]" line adds a picture.
  * Questions are separated by a blank line.
  */
 export function parse(src: string, time: number): Parsed {
-  const blocks = src
-    .replace(/\r/g, '')
-    .split(/\n\s*\n/)
-    .map((b) => b.trim())
-    .filter(Boolean);
+  const blocks = blocksOf(src);
   const qs: Question[] = [];
   const fail = (i: number, msg: string): Parsed => ({ qs: [], err: `Question ${i + 1}: ${msg}` });
 
   for (const [i, block] of blocks.entries()) {
-    const [text, ...lines] = block.split('\n').map((l) => l.trim()).filter(Boolean);
+    const [text, ...all] = block
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean);
+    let media: { img?: string; pos?: ImgPos } = {};
+    const lines: string[] = [];
+    for (const l of all) {
+      const m = IMG_RE.exec(l);
+      if (!m) {
+        lines.push(l);
+        continue;
+      }
+      if (!/^https?:\/\//i.test(m[1])) return fail(i, 'the image must be an http(s) link.');
+      media = { img: m[1].slice(0, 1000), pos: (m[2]?.toLowerCase() as ImgPos | undefined) ?? 'side' };
+    }
     const eq = lines.filter((l) => l.startsWith('='));
     if (eq.length) {
       if (eq.length > 1 || lines.length > 1) return fail(i, 'a price/number question has only one "=" line.');
@@ -125,6 +154,7 @@ export function parse(src: string, time: number): Parsed {
         kind: 'number',
         pre: m[1].slice(0, 5),
         suf: m[3].trim().slice(0, 12),
+        ...media,
       });
       continue;
     }
@@ -141,7 +171,7 @@ export function parse(src: string, time: number): Parsed {
     }
     if (choices.length < 2 || choices.length > 4) return fail(i, 'needs 2 to 4 choices.');
     if (answer < 0) return fail(i, 'mark the correct answer with "*".');
-    qs.push({ text: text.slice(0, 200), choices, answer, time });
+    qs.push({ text: text.slice(0, 200), choices, answer, time, ...media });
   }
   return qs.length ? { qs, err: null } : { qs, err: 'Add at least one question.' };
 }
