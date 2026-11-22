@@ -120,6 +120,49 @@ export default function Preview({ qs, onImage, onClose }: Props) {
   );
 }
 
+/** Accepts a direct image link, or a Google Images result link (extracts its `imgurl`). */
+function imageLink(raw: string): string | null {
+  const t = raw.trim();
+  try {
+    const u = new URL(t);
+    const inner = u.searchParams.get('imgurl') ?? u.searchParams.get('mediaurl');
+    const link = inner ? new URL(inner).href : u.href;
+    return /^https?:$/.test(new URL(link).protocol) ? link : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Resolves if the URL loads as an image in the browser. */
+const loads = (src: string) =>
+  new Promise<boolean>((ok) => {
+    const img = new Image();
+    const t = setTimeout(() => ok(false), 10000);
+    img.onload = () => (clearTimeout(t), ok(true));
+    img.onerror = () => (clearTimeout(t), ok(false));
+    img.src = src;
+  });
+
+/**
+ * Search terms: the product name for price questions; otherwise the correct answer (or a short
+ * version of the question when the answer is just a number) plus "funny baby".
+ */
+function searchTerms(q: Question): string {
+  const product = /^what is the price of (?:an? )?(.+?)\??$/i.exec(q.text)?.[1];
+  if (product) return product;
+  if (q.kind === 'number') return q.text.replace(/\?$/, '');
+  const ans = q.choices[q.answer] ?? '';
+  const topic =
+    /[a-z]{3,}/i.test(ans) && !/\d/.test(ans) && ans.length <= 30
+      ? ans
+      : q.text
+          .replace(/[?"“”]/g, '')
+          .split(/\s+/)
+          .slice(0, 8)
+          .join(' ');
+  return `${topic} funny baby`;
+}
+
 function ImageBar({
   q,
   n,
@@ -150,30 +193,53 @@ function ImageBar({
     }
   };
 
-  const useLink = () => {
-    const u = url.trim();
-    if (!/^https?:\/\/\S+$/i.test(u)) return setMsg('Paste a full link starting with https://');
-    onChange(u, pos);
+  const useLink = async (raw: string) => {
+    const link = imageLink(raw);
+    if (!link) return setMsg('That is not a link. Right-click a picture and choose "Copy image address".');
+    setBusy(true);
+    setMsg('Checking picture…');
+    const ok = await loads(link);
+    setBusy(false);
+    if (!ok)
+      return setMsg('That link is not a picture (or the site blocks it). Try "Copy image address" on another one.');
+    onChange(link, pos);
     setUrl('');
     setMsg('');
   };
 
+  const paste = async () => {
+    try {
+      await useLink(await navigator.clipboard.readText());
+    } catch {
+      setMsg('Could not read the clipboard. Paste the link into the box instead.');
+    }
+  };
+
+  const find = () =>
+    window.open(`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(searchTerms(q))}`, '_blank', 'noopener');
+
   return (
     <div className="card img-bar">
       <b className="small">Picture for question {n}</b>
+      <button className="ghost sm" onClick={find} title={`Search images for "${searchTerms(q)}"`}>
+        Find picture ↗
+      </button>
+      <button className="ghost sm" disabled={busy} onClick={() => void paste()}>
+        Paste link
+      </button>
       <input ref={file} type="file" accept="image/*" hidden onChange={(e) => void upload(e.target.files?.[0])} />
       <button className="ghost sm" disabled={busy} onClick={() => file.current?.click()}>
-        {q.img ? 'Replace picture' : 'Upload picture'}
+        Upload
       </button>
       <input
         className="img-url"
-        placeholder="…or paste an image link"
+        placeholder="…or paste an image link here"
         value={url}
         onChange={(e) => setUrl(e.target.value)}
-        onKeyDown={(e) => e.key === 'Enter' && useLink()}
+        onKeyDown={(e) => e.key === 'Enter' && void useLink(url)}
       />
       {url && (
-        <button className="ghost sm" onClick={useLink}>
+        <button className="ghost sm" disabled={busy} onClick={() => void useLink(url)}>
           Use link
         </button>
       )}
@@ -192,6 +258,9 @@ function ImageBar({
         </>
       )}
       {msg && <span className={busy ? 'muted small' : 'error small'}>{msg}</span>}
+      <span className="muted small hint">
+        Tip: Find picture → right-click an image → "Copy image address" → Paste link.
+      </span>
     </div>
   );
 }

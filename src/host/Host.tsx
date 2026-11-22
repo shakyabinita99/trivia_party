@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateActio
 import QRCode from 'qrcode';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { room, supabase } from '../lib/supabase';
+import { PRESETS } from '../lib/presets';
 import { parse, QUESTIONS_KEY, SAMPLE, setImage } from '../lib/questions';
 import { fmtNum, type AnswerMsg, type JoinMsg, type Question } from '../lib/types';
 import { applyTheme, isTheme, THEMES, type ThemeId } from '../lib/themes';
@@ -78,7 +79,7 @@ function Setup({ onCreate }: { onCreate: (qs: Question[], theme: ThemeId) => voi
   useEffect(() => void refresh(), []);
 
   const load = (id: string) => {
-    const quiz = saved.find((x) => x.id === id);
+    const quiz = [...PRESETS, ...saved].find((x) => x.id === id);
     if (!quiz) return;
     setSrc(quiz.questions);
     setName(quiz.name);
@@ -132,12 +133,23 @@ function Setup({ onCreate }: { onCreate: (qs: Question[], theme: ThemeId) => voi
           <h2>Questions</h2>
           <span className="gap">
             <select value="" onChange={(e) => load(e.target.value)} aria-label="Load saved quiz">
-              <option value="">{saved.length ? 'Load saved quiz…' : 'No saved quizzes'}</option>
-              {saved.map((x) => (
-                <option key={x.id} value={x.id}>
-                  {x.name}
-                </option>
-              ))}
+              <option value="">Load a quiz…</option>
+              <optgroup label="Templates">
+                {PRESETS.map((x) => (
+                  <option key={x.id} value={x.id}>
+                    {x.name}
+                  </option>
+                ))}
+              </optgroup>
+              {saved.length > 0 && (
+                <optgroup label="Saved">
+                  {saved.map((x) => (
+                    <option key={x.id} value={x.id}>
+                      {x.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
             </select>
             <select value={time} onChange={(e) => setTime(Number(e.target.value))} aria-label="Time per question">
               {[10, 15, 20, 30, 45, 60].map((s) => (

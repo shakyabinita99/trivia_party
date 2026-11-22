@@ -40,13 +40,17 @@ How tall is the Eiffel Tower?
 
 ## Pictures
 
-In **Preview**, upload a picture (or paste an image link) for any question and choose **Side** (right, ~55% of the screen) or **Top** (centered above, ~half the screen height). Phones show a smaller copy. In the question text it is stored as `@image <url> side|top`.
+In **Preview**, use **Find picture** (opens an image search for that product/question), right-click a result → *Copy image address*, then **Paste link**. Links are checked before they're added; Google Images result links work too. You can also upload a picture or paste a link for any question and choose **Side** (right, ~55% of the screen) or **Top** (centered above, ~half the screen height). Phones show a smaller copy. In the question text it is stored as `@image <url> side|top`.
 
 Uploads need the storage bucket: run `supabase/trivia_images.sql` once in the SQL Editor. Pasted links work without it.
 
 ## Leaderboard
 
 Shown between questions and at the end: bar chart for the top 3, plus a scrollable list of every player. The host can also open it any time from the **Leaderboard** button in the top bar.
+
+## Templates
+
+`src/lib/presets.ts` ships two ready quizzes (Baby Shower: Price Is Right, Baby Shower Trivia). Load one from **Load a quiz… → Templates**, add pictures, then **Save** to keep your edited copy.
 
 ## Themes
 
