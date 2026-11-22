@@ -7,6 +7,7 @@ import { fmtNum, type AnswerMsg, type JoinMsg, type Question } from '../lib/type
 import { applyTheme, isTheme, THEMES, type ThemeId } from '../lib/themes';
 import { store, useNow } from '../lib/util';
 import Choices from '../Choices';
+import Preview from './Preview';
 import {
   advance,
   answer,
@@ -54,6 +55,7 @@ function Setup({ onCreate }: { onCreate: (qs: Question[], theme: ThemeId) => voi
   const [saved, setSaved] = useState<Saved[]>([]);
   const [msg, setMsg] = useState('');
   const { qs, err } = useMemo(() => parse(src, time), [src, time]);
+  const [previewing, setPreviewing] = useState(false);
 
   useEffect(() => store.set(QUESTIONS_KEY, src), [src]);
   useEffect(() => store.set('trivia-quiz-name', name), [name]);
@@ -93,6 +95,8 @@ function Setup({ onCreate }: { onCreate: (qs: Question[], theme: ThemeId) => voi
     setMsg(error ? `Save failed: ${error.message}` : `Saved "${n}"`);
     if (!error) void refresh();
   };
+
+  if (previewing && qs.length) return <Preview qs={qs} onClose={() => setPreviewing(false)} />;
 
   return (
     <main className="page setup">
@@ -147,6 +151,9 @@ function Setup({ onCreate }: { onCreate: (qs: Question[], theme: ThemeId) => voi
           <span className="gap">
             <button className="ghost" onClick={() => confirm('Replace with sample questions?') && setSrc(SAMPLE)}>
               Sample
+            </button>
+            <button className="ghost" disabled={!!err} onClick={() => setPreviewing(true)}>
+              Preview
             </button>
             <button className="ghost" disabled={!!err} onClick={save}>
               Save
