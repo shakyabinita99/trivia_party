@@ -339,6 +339,11 @@ function Room({ game, setGame, onExit }: { game: Game; setGame: SetGame; onExit:
               {answered} / {list.length} answered
             </span>
           </div>
+          {game.phase === 'question' && (
+            <div className={`tbar ${left <= 5 ? 'warn' : ''}`}>
+              <i style={{ width: `${Math.max(0, Math.min(100, ((game.startAt + q.time * 1000 - now) / (q.time * 1000)) * 100))}%` }} />
+            </div>
+          )}
           <Framed q={q}>
             <h1 className="qtext">{q.text}</h1>
             {q.kind === 'number' ? (

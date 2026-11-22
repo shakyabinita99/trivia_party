@@ -137,7 +137,8 @@ export function parse(src: string, time: number): Parsed {
         lines.push(l);
         continue;
       }
-      if (!/^https?:\/\//i.test(m[1])) return fail(i, 'the image must be an http(s) link.');
+      // http(s) links, or pictures bundled with the site (e.g. /pics/price-01.jpg).
+      if (!/^(https?:\/\/|\/(?!\/))/i.test(m[1])) return fail(i, 'the image must be an http(s) link.');
       media = { img: m[1].slice(0, 1000), pos: (m[2]?.toLowerCase() as ImgPos | undefined) ?? 'side' };
     }
     const eq = lines.filter((l) => l.startsWith('='));

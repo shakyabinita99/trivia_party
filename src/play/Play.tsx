@@ -41,6 +41,7 @@ function Join({ error, onJoin }: { error: string; onJoin: (s: Session) => void }
   return (
     <main className="page join-page">
       <h1 className="brand">Trivia Party</h1>
+      <p className="muted tagline">Enter the PIN on the big screen to join</p>
       <form
         className="card stack"
         onSubmit={(e) => {
@@ -135,6 +136,11 @@ function Live({ session, onLeave }: { session: Session; onLeave: (msg?: string) 
       supabase!.removeChannel(ch);
     };
   }, [id, session.pin, session.name]);
+
+  // Forget the last pick once a question ends, so "Play again" (which restarts at Q1) doesn't show it as locked in.
+  useEffect(() => {
+    if (st && st.phase !== 'question') setPicked(null);
+  }, [st?.phase]);
 
   const now = useNow(st?.phase === 'question');
   const me = st?.players[id];

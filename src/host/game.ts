@@ -51,7 +51,9 @@ export function join(g: Game, m: JoinMsg): Game {
 
 export function kick(g: Game, id: string): Game {
   const { [id]: _gone, ...players } = g.players;
-  return { ...g, players, banned: [...g.banned, id] };
+  const next = { ...g, players, banned: [...g.banned, id] };
+  // If the removed player was the last one we were waiting on, reveal now.
+  return next.phase === 'question' && allAnswered(next) ? reveal(next) : next;
 }
 
 const allAnswered = (g: Game) => {
@@ -142,7 +144,9 @@ export function replay(g: Game): Game {
 }
 
 export const counts = (g: Game) =>
-  g.questions[g.q].choices.map((_, i) => Object.values(g.answers).filter((a) => a.choice === i).length);
+  g.questions[g.q].choices.map(
+    (_, i) => Object.entries(g.answers).filter(([id, a]) => g.players[id] && a.choice === i).length,
+  );
 
 export function publicState(g: Game): PubState {
   const q = g.questions[g.q];
