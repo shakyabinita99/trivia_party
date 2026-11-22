@@ -1,4 +1,5 @@
 import type { ThemeId } from './themes';
+import { blocksOf, IMG_RE } from './questions';
 
 export type Preset = { id: string; name: string; theme: ThemeId; time: number; questions: string };
 
@@ -295,3 +296,28 @@ export const PRESETS: Preset[] = [
   { id: 'preset:price', name: 'Baby Shower: Price Is Right', theme: 'ocean', time: 30, questions: PRICE },
   { id: 'preset:shower', name: 'Baby Shower Trivia', theme: 'pink', time: 20, questions: SHOWER },
 ];
+
+const norm = (t: string) => t.trim().toLowerCase().replace(/\s+/g, ' ');
+
+/** Built-in pictures, keyed by question text (the baby shower questions). */
+const PICTURES = new Map(
+  PRESETS.flatMap((p) =>
+    blocksOf(p.questions).flatMap((b) => {
+      const [text, ...rest] = b.split('\n');
+      const img = rest.find((l) => IMG_RE.test(l.trim()));
+      return img ? [[norm(text), img.trim()] as const] : [];
+    }),
+  ),
+);
+
+/** Adds the built-in picture to any question that matches one and has no picture yet. */
+export function addPictures(src: string): string {
+  return blocksOf(src)
+    .map((b) => {
+      const [text, ...rest] = b.split('\n');
+      if (rest.some((l) => IMG_RE.test(l.trim()))) return b;
+      const img = PICTURES.get(norm(text));
+      return img ? [text, img, ...rest].join('\n') : b;
+    })
+    .join('\n\n');
+}

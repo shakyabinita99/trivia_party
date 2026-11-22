@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateActio
 import QRCode from 'qrcode';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { room, supabase } from '../lib/supabase';
-import { PRESETS } from '../lib/presets';
+import { addPictures } from '../lib/presets';
 import { parse, QUESTIONS_KEY, SAMPLE, setImage } from '../lib/questions';
 import { fmtNum, LETTERS, type AnswerMsg, type JoinMsg, type Question } from '../lib/types';
 import { applyTheme, isTheme, THEMES, type ThemeId } from '../lib/themes';
@@ -79,13 +79,19 @@ function Setup({ onCreate }: { onCreate: (qs: Question[], theme: ThemeId) => voi
   useEffect(() => void refresh(), []);
 
   const load = (id: string) => {
-    const quiz = [...PRESETS, ...saved].find((x) => x.id === id);
+    const quiz = saved.find((x) => x.id === id);
     if (!quiz) return;
-    setSrc(quiz.questions);
+    const withPics = addPictures(quiz.questions);
+    const added = (withPics.match(/^@image /gm)?.length ?? 0) - (quiz.questions.match(/^@image /gm)?.length ?? 0);
+    setSrc(withPics);
     setName(quiz.name);
     setTheme(isTheme(quiz.theme) ? quiz.theme : 'party');
     setTime(quiz.time);
-    setMsg(`Loaded "${quiz.name}"`);
+    setMsg(
+      added > 0
+        ? `Loaded "${quiz.name}" and added ${added} pictures. Press Save to keep them.`
+        : `Loaded "${quiz.name}"`,
+    );
   };
 
   const save = async () => {
@@ -134,22 +140,11 @@ function Setup({ onCreate }: { onCreate: (qs: Question[], theme: ThemeId) => voi
           <span className="gap">
             <select value="" onChange={(e) => load(e.target.value)} aria-label="Load saved quiz">
               <option value="">Load a quiz…</option>
-              <optgroup label="Templates">
-                {PRESETS.map((x) => (
-                  <option key={x.id} value={x.id}>
-                    {x.name}
-                  </option>
-                ))}
-              </optgroup>
-              {saved.length > 0 && (
-                <optgroup label="Saved">
-                  {saved.map((x) => (
-                    <option key={x.id} value={x.id}>
-                      {x.name}
-                    </option>
-                  ))}
-                </optgroup>
-              )}
+              {saved.map((x) => (
+                <option key={x.id} value={x.id}>
+                  {x.name}
+                </option>
+              ))}
             </select>
             <select value={time} onChange={(e) => setTime(Number(e.target.value))} aria-label="Time per question">
               {[10, 15, 20, 30, 45, 60].map((s) => (

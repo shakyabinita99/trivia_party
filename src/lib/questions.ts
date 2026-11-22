@@ -93,9 +93,9 @@ What is the hardest natural substance?
 
 export const QUESTIONS_KEY = 'trivia-questions';
 
-const IMG_RE = /^@image\s+(\S+)(?:\s+(top|side))?\s*$/i;
+export const IMG_RE = /^@image\s+(\S+)(?:\s+(top|side))?\s*$/i;
 
-const blocksOf = (src: string) =>
+export const blocksOf = (src: string) =>
   src
     .replace(/\r/g, '')
     .split(/\n\s*\n/)
